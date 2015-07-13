@@ -36,6 +36,21 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 
 		if(!isset($directory, $fileext)) die('FilesystemPublisher configuration not found.');
 
+		// Get list of cacheable pages in the live SiteTree
+		$pages = singleton('Page')->allPagesToCache();
+		foreach($pages as $page_link) {
+			if($page = SiteTree::get_by_link($page_link)) {
+				if($subpages = $page->subPagesToCache()) {
+					$pages = array_merge($pages, $subpages);
+					unset($subpages);
+				}
+				if(method_exists($page, 'pagesAffectedByChanges') && $affectedpages = $page->pagesAffectedByChanges()) {
+					$pages = array_merge($pages, $affectedpages);
+					unset($affectedpages);
+				}
+			}
+		}
+
 		// Get array of custom exclusion regexes from Config system
 		$excludes = $this->config()->get('exclude');
 
@@ -46,6 +61,8 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 		while($it->valid()) {
 
 			$file_relative = $it->getSubPathName();
+
+			// Get URL path from filename
 			$urlpath = substr($file_relative, 0, strpos($file_relative, '.' . $fileext));
 
 			// Exclude dot-files
@@ -54,7 +71,7 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 			}
 
 			// Handle homepage special case
-			if($file_relative == 'index.html') $urlpath = 'home';
+			if($file_relative == 'index.html') $urlpath = '';
 
 			// Exclude files that do not end in the file extension specified for FilesystemPublisher
 			$length = strlen('.' . $fileext);
@@ -80,14 +97,15 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 				}
 			}
 
-			// Exclude files for pages that exist in the SiteTree
-			if(SiteTree::get_by_link($urlpath)) {
+			// Exclude files for pages that exist in the SiteTree as well as known cacheable sub-pages
+			// This array_intersect checks against any combination of leading and trailing slashes in the $pages values
+			if(array_intersect(array($urlpath, $urlpath.'/', '/'.$urlpath, '/'.$urlpath.'/'), $pages)) {
 				$it->next();
 				continue;
 			}
 
 			$removeURLs[$urlpath] = $file_relative;
-			echo $file_relative;
+			echo $file_relative . "\n";
 
 			$it->next();
 
