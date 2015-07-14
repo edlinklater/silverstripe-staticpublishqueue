@@ -7,8 +7,9 @@
  *   PurgeObseleteStaticCacheTask:
  *     exclude:
  *       - '/^blog\/tag\//'
+ *       - '/\.backup$/'
  *
- * Note that you need to escape forward slashes in your regular expressions.
+ * Note that you need to escape forward slashes in your regular expressions and exclude the file extension (e.g. .html).
  */
 class PurgeObseleteStaticCacheTask extends BuildTask {
 
