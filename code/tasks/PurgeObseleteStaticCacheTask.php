@@ -14,27 +14,35 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 
 	protected $description = 'Purge obselete: cleans up obselete/orphaned staticpublisher cache files';
 
-	public function __construct() {
+	protected $directory = null;
+	protected $fileext = null;
+
+	public function __construct($config = null) {
 		parent::__construct();
 		if ($this->config()->get('disabled') === true) {
-			$this->enabled = false ;
+			$this->enabled = false;
+		}
+		if($config && count($config) === 2) {
+			list($this->directory, $this->fileext) = $config;
 		}
 	}
 
-	function run($request) {
+	function run($request=null) {
 		ini_set('memory_limit','512M');
 		$oldMode = Versioned::get_reading_mode();
 		Versioned::reading_stage('Live');
 
-		foreach(Config::inst()->get('SiteTree', 'extensions') as $extension) {
-			if(preg_match('/FilesystemPublisher\(\'(\w+)\',\s?\'(\w+)\'\)/', $extension, $matches)) {
-				$directory = BASE_PATH . '/' . $matches[1];
-				$fileext = $matches[2];
-				break;
+		if(!isset($this->directory, $this->fileext)) {
+			foreach(Config::inst()->get('SiteTree', 'extensions') as $extension) {
+				if(preg_match('/FilesystemPublisher\(\'(\w+)\',\s?\'(\w+)\'\)/', $extension, $matches)) {
+					$this->directory = BASE_PATH . '/' . $matches[1];
+					$this->fileext = $matches[2];
+					break;
+				}
 			}
 		}
 
-		if(!isset($directory, $fileext)) die('FilesystemPublisher configuration not found.');
+		if(!isset($this->directory, $this->fileext)) die('FilesystemPublisher configuration not found.');
 
 		// Get list of cacheable pages in the live SiteTree
 		$pages = singleton('Page')->allPagesToCache();
@@ -57,14 +65,14 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 
 		$removeURLs = array();
 
-		$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory));
+		$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($this->directory));
 		$it->rewind();
 		while($it->valid()) {
 
 			$file_relative = $it->getSubPathName();
 
 			// Get URL path from filename
-			$urlpath = substr($file_relative, 0, strpos($file_relative, '.' . $fileext));
+			$urlpath = substr($file_relative, 0, strpos($file_relative, '.' . $this->fileext));
 
 			// Exclude dot-files
 			if($it->isDot()) {
@@ -75,15 +83,15 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 			if($file_relative == 'index.html') $urlpath = '';
 
 			// Exclude files that do not end in the file extension specified for FilesystemPublisher
-			$length = strlen('.' . $fileext);
-			if(substr($file_relative, -$length) != '.' . $fileext) {
+			$length = strlen('.' . $this->fileext);
+			if(substr($file_relative, -$length) != '.' . $this->fileext) {
 				$it->next();
 				continue;
 			}
 
 			// Exclude stale files (these are automatically deleted alongside the fresh file)
-			$length = strlen('.stale.' . $fileext);
-			if(substr($file_relative, -$length) == '.stale.' . $fileext) {
+			$length = strlen('.stale.' . $this->fileext);
+			if(substr($file_relative, -$length) == '.stale.' . $this->fileext) {
 				$it->next();
 				continue;
 			}
@@ -112,7 +120,7 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 
 		}
 
-		echo sprintf("PurgeObseleteStaticCacheTask: Deleting %d obselete pages from cache\n", count($removeURLs));
+		echo sprintf("PurgeObseleteStaticCacheTask: Deleting %d obselete pages from %s\n", count($removeURLs), $this->directory);
 
 		// Remove current and stale cache files
 		singleton('SiteTree')->unpublishPagesAndStaleCopies($removeURLs);
