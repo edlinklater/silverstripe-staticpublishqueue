@@ -39,12 +39,13 @@ class PurgeObseleteStaticCacheTask extends BuildTask {
 		// Get list of cacheable pages in the live SiteTree
 		$pages = singleton('Page')->allPagesToCache();
 		foreach($pages as $page_link) {
-			if($page = SiteTree::get_by_link($page_link)) {
+			$page = SiteTree::get_by_link($page_link);
+			if($page && $page->getLiveURLSegment()) {
 				if($subpages = $page->subPagesToCache()) {
 					$pages = array_merge($pages, $subpages);
 					unset($subpages);
 				}
-				if(method_exists($page, 'pagesAffectedByChanges') && $affectedpages = $page->pagesAffectedByChanges()) {
+				if($affectedpages = $page->pagesAffected()) {
 					$pages = array_merge($pages, $affectedpages);
 					unset($affectedpages);
 				}
